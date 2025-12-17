@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 
 export const runtime = "nodejs";
 
@@ -12,21 +11,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No image provided" }, { status: 400 });
     }
 
-    // --- No-cost stub: allow end-to-end testing without a key ---
+    // --- No-cost stub: exit BEFORE any SDK import/calls ---
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
+      // Minimal success payload so you can test end-to-end
       return NextResponse.json({
         items: [],
         notes:
-          "AI analyser not configured (missing ANTHROPIC_API_KEY). Placeholder result for testing.",
+          "AI analyser not configured (missing ANTHROPIC_API_KEY). Placeholder result for testing."
       });
     }
-    // ------------------------------------------------------------
+    // ------------------------------------------------------
 
-    // Only read bytes when we actually need to call Anthropic
+    // Only read bytes and import SDK if we actually have a key
     const bytes = await image.arrayBuffer();
     const base64Image = Buffer.from(bytes).toString("base64");
 
+    // Lazy import Anthropic so there’s zero SDK initialisation without a key
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const anthropic = new Anthropic({ apiKey });
 
     const message = await anthropic.messages.create({
@@ -39,21 +41,23 @@ export async function POST(request: NextRequest) {
             {
               type: "text",
               text:
-                "Please analyze this image and identify all chattels and furniture items. For each item, provide its name and estimate its replacement cost in GBP. Focus on significant items that would be considered in a property inventory. Format your response as a JSON array of objects, where each object has 'name', 'replacementCost' (in GBP), and 'confidence' (0-1) properties.",
+                "Please analyze this image and identify all chattels and furniture items. For each item, provide its name and estimate its replacement cost in GBP. Focus on significant items that would be considered in a property inventory. Format your response as a JSON array of objects, where each object has 'name', 'replacementCost' (in GBP), and 'confidence' (0-1) properties."
             },
             {
               type: "image",
               source: {
-                type: (image.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif") || "image/jpeg",
-                data: base64Image,
-                // Claude expects base64 + media type; no filename needed
-                // If image.type is empty (some browsers), we fall back to image/jpeg
-                // You can add validation here if you want to restrict to common types.
-              },
-            },
-          ],
-        },
-      ],
+                type:
+                  (image.type as
+                    | "image/jpeg"
+                    | "image/png"
+                    | "image/webp"
+                    | "image/gif") || "image/jpeg",
+                data: base64Image
+              }
+            }
+          ]
+        }
+      ]
     });
 
     const content = message.content[0];
@@ -62,9 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     let items: Array<any> = [];
-
     try {
-      // Extract JSON array/object from free-form text
       const jsonMatch = content.text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
       if (jsonMatch) {
         items = JSON.parse(jsonMatch[0]);
