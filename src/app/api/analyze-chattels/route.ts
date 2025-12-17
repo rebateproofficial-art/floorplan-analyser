@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -66,12 +65,10 @@ export async function POST(request: NextRequest) {
             {
               type: "image",
               source: {
-                type:
-                  (image.type as
-                    | "image/jpeg"
-                    | "image/png"
-                    | "image/webp"
-                    | "image/gif") || "image/jpeg",
+                type: "base64", // IMPORTANT: must be "base64" or "url"
+                media_type:
+                  (image.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif") ||
+                  "image/jpeg",
                 data: base64Image
               }
             }
@@ -94,7 +91,6 @@ export async function POST(request: NextRequest) {
       if (Array.isArray(parsed)) {
         items = (parsed as unknown[]).filter(isChattelItem);
       } else if (isRecord(parsed)) {
-        // Support shape: { items: [...] }
         const maybeItems = (parsed as { items?: unknown }).items;
         if (Array.isArray(maybeItems)) {
           items = (maybeItems as unknown[]).filter(isChattelItem);
