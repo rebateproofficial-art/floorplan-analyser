@@ -12,9 +12,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No image provided" }, { status: 400 });
     }
 
-    const bytes = await image.arrayBuffer();
-    const base64Image = Buffer.from(bytes).toString("base64");
-
     // --- No-cost stub: allow end-to-end testing without a key ---
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -25,6 +22,10 @@ export async function POST(request: NextRequest) {
       });
     }
     // ------------------------------------------------------------
+
+    // Only read bytes when we actually need to call Anthropic
+    const bytes = await image.arrayBuffer();
+    const base64Image = Buffer.from(bytes).toString("base64");
 
     const anthropic = new Anthropic({ apiKey });
 
@@ -43,10 +44,11 @@ export async function POST(request: NextRequest) {
             {
               type: "image",
               source: {
-                type: "base64",
-                // use uploaded mime type if available, otherwise fall back
-                media_type: (image.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif") || "image/jpeg",
+                type: (image.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif") || "image/jpeg",
                 data: base64Image,
+                // Claude expects base64 + media type; no filename needed
+                // If image.type is empty (some browsers), we fall back to image/jpeg
+                // You can add validation here if you want to restrict to common types.
               },
             },
           ],
