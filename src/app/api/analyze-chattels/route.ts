@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+type ChattelItem = {
+  name: string;
+  replacementCost: number;
+  confidence: number; // 0–1
+};
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const image = formData.get("image") as File;
+    const image = formData.get("image") as File | null;
 
     if (!image) {
       return NextResponse.json({ error: "No image provided" }, { status: 400 });
@@ -14,9 +20,8 @@ export async function POST(request: NextRequest) {
     // --- No-cost stub: exit BEFORE any SDK import/calls ---
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      // Minimal success payload so you can test end-to-end
       return NextResponse.json({
-        items: [],
+        items: [] as ChattelItem[],
         notes:
           "AI analyser not configured (missing ANTHROPIC_API_KEY). Placeholder result for testing."
       });
@@ -46,12 +51,10 @@ export async function POST(request: NextRequest) {
             {
               type: "image",
               source: {
-                type:
-                  (image.type as
-                    | "image/jpeg"
-                    | "image/png"
-                    | "image/webp"
-                    | "image/gif") || "image/jpeg",
+                type: "base64",
+                media_type:
+                  (image.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif") ||
+                  "image/jpeg",
                 data: base64Image
               }
             }
@@ -60,19 +63,22 @@ export async function POST(request: NextRequest) {
       ]
     });
 
-    const content = message.content[0];
-    if (content.type !== "text") {
+    const first = message.content[0];
+    if (first.type !== "text") {
       throw new Error("Unexpected response type from Claude");
     }
 
-    let items: Array<any> = [];
+    let items: ChattelItem[] = [];
+
     try {
-      const jsonMatch = content.text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+      // Extract JSON array/object from free-form text
+      const jsonMatch = first.text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
       if (jsonMatch) {
-        items = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        items = Array.isArray(parsed) ? parsed : (parsed.items as ChattelItem[] | undefined) ?? [];
       }
-    } catch (error) {
-      console.error("Error parsing Claude's response:", error);
+    } catch (err) {
+      console.error("Error parsing Claude's response:", err);
       return NextResponse.json(
         { error: "Failed to parse analysis results" },
         { status: 500 }
