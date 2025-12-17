@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
       const parsed: unknown = JSON.parse(match[0]);
 
       if (Array.isArray(parsed)) {
-        items = parsed.filter(isChattelItem);
+        items = (parsed as unknown[]).filter(isChattelItem);
       } else if (isRecord(parsed)) {
         // Support shape: { items: [...] }
         const maybeItems = (parsed as { items?: unknown }).items;
