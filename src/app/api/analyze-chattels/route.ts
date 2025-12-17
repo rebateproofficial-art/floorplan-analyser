@@ -4,9 +4,23 @@ export const runtime = "nodejs";
 
 type ChattelItem = {
   name: string;
-  replacementCost: number;
+  replacementCost: number; // GBP
   confidence: number; // 0–1
 };
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function isChattelItem(v: unknown): v is ChattelItem {
+  if (!isRecord(v)) return false;
+  const { name, replacementCost, confidence } = v as Record<string, unknown>;
+  return (
+    typeof name === "string" &&
+    typeof replacementCost === "number" &&
+    typeof confidence === "number"
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,10 +65,12 @@ export async function POST(request: NextRequest) {
             {
               type: "image",
               source: {
-                type: "base64",
-                media_type:
-                  (image.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif") ||
-                  "image/jpeg",
+                type:
+                  (image.type as
+                    | "image/jpeg"
+                    | "image/png"
+                    | "image/webp"
+                    | "image/gif") || "image/jpeg",
                 data: base64Image
               }
             }
@@ -68,21 +84,21 @@ export async function POST(request: NextRequest) {
       throw new Error("Unexpected response type from Claude");
     }
 
+    // Extract JSON array/object from free-form text
     let items: ChattelItem[] = [];
+    const match = first.text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    if (match) {
+      const parsed: unknown = JSON.parse(match[0]);
 
-    try {
-      // Extract JSON array/object from free-form text
-      const jsonMatch = first.text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        items = Array.isArray(parsed) ? parsed : (parsed.items as ChattelItem[] | undefined) ?? [];
+      if (Array.isArray(parsed)) {
+        items = parsed.filter(isChattelItem);
+      } else if (isRecord(parsed)) {
+        // Support shape: { items: [...] }
+        const maybeItems = (parsed as { items?: unknown }).items;
+        if (Array.isArray(maybeItems)) {
+          items = (maybeItems as unknown[]).filter(isChattelItem);
+        }
       }
-    } catch (err) {
-      console.error("Error parsing Claude's response:", err);
-      return NextResponse.json(
-        { error: "Failed to parse analysis results" },
-        { status: 500 }
-      );
     }
 
     return NextResponse.json({ items });
